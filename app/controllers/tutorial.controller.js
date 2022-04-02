@@ -1,5 +1,7 @@
 const db = require("../models");
 const Tutorial = db.tutorials;
+const redisClient = require("../models/redis.js");
+
 
 // Create and Save a new Tutorial
 exports.create = (req, res) => {
@@ -32,19 +34,33 @@ exports.create = (req, res) => {
 
 // Retrieve all Tutorials from the database.
 exports.findAll = (req, res) => {
-  const title = req.query.title;
+  var title = req.query.title;
+  console.log(req.query);
+  var tutorialName = "";
+  
+  if (title == null) {
+	tutorialName="allTutorialsList";		
+  }else{
+	  tutorialName = title;
+  }
   var condition = title ? { title: { $regex: new RegExp(title), $options: "i" } } : {};
+	
+	redisClient.get(tutorialName, async (err, data) => {
+     if (data) {
+		 console.log("Getting data from Redis Cache");
+		 console.log(data);
+		 res.send(data);
+     }else{
+		Tutorial.find(condition)
+		.then(data => {
+			console.log("Getting data from MongoDB and storing in redis cache");
+			console.log(data);
+			redisClient.setex(tutorialName, 600, JSON.stringify(data));
+			res.send(data);
+		})		 
+	 }
+})
 
-  Tutorial.find(condition)
-    .then(data => {
-      res.send(data);
-    })
-    .catch(err => {
-      res.status(500).send({
-        message:
-          err.message || "Some error occurred while retrieving tutorials."
-      });
-    });
 };
 
 // Find a single Tutorial with an id
